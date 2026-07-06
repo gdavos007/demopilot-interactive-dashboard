@@ -1,25 +1,74 @@
 # DemoPilot
 
-Interactive product demo agent for Carbon Black. Users ask questions via **chat** or **voice**, a RAG-backed knowledge agent answers from product documentation, and the UI navigates a **Storylane** dashboard to the relevant section.
+Interactive product demo agent for CrowdStrike Falcon. Users ask questions via **chat** or **voice**, a RAG-backed knowledge agent answers from product documentation, and the UI navigates a **Storylane** dashboard to the relevant section.
 
 ## Architecture
 
-```
-Browser (localhost:3000)
-  ├── Chat / Voice UI (Next.js + Material UI)
-  ├── Storylane iframe navigation
-  └── VAPI Web SDK (voice)
+```mermaid
+flowchart TB
+    subgraph Client["Browser :3000 (Next.js)"]
+        Chat[Chat Interface]
+        Voice[Voice Widget]
+        KC[knowledgeClient.ts]
+        SC[StorylaneController]
+        SM[StorylaneMapper]
+        IF[Storylane iframe]
+    end
 
-FastAPI Backend (localhost:8000)
-  ├── Product Knowledge Agent (RAG + Claude Haiku 4.5)
-  ├── VAPI webhook endpoints
-  └── LangSmith evaluation framework (optional)
+    subgraph Backend["FastAPI :8000"]
+        KQ["POST /api/v1/knowledge/query"]
+        Agent[Product Knowledge Agent]
+        FAISS[FAISS Vector Store]
+        Eval[LangSmith Evaluators]
+    end
+
+    subgraph External["External Services"]
+        Docs[CrowdStrike Docs via Dropbox HTML]
+        Anthropic[Anthropic Claude Haiku]
+        OpenAI[OpenAI Embeddings / LLM Fallback]
+        VAPI[VAPI Cloud STT + TTS]
+        LS[LangSmith Tracing]
+        SL[Storylane CDN]
+    end
+
+    Chat --> KC
+    Voice --> KC
+    Voice --> VAPI
+    KC --> KQ
+    KQ --> Agent
+    Agent --> FAISS
+    Agent --> Anthropic
+    Agent -.-> OpenAI
+    Agent --> LS
+    Chat --> SC
+    Voice --> SC
+    SC --> SM
+    SC --> IF
+    IF --> SL
+    Docs -. scrape on startup .-> FAISS
+    Eval --> LS
 ```
+
+### Agent loop
+
+1. **Perceive** — User query via chat input or voice transcript (VAPI STT)
+2. **Retrieve** — FAISS similarity search over CrowdStrike documentation chunks
+3. **Reason** — Claude Haiku generates a grounded answer (OpenAI fallback if needed)
+4. **Act** — `StorylaneController` navigates the iframe to the mapped dashboard section; voice speaks the RAG response via VAPI TTS
+
+### Voice vs chat
+
+| Path | Knowledge answers | Audio | Dashboard navigation |
+|------|-------------------|-------|----------------------|
+| **Chat** | `knowledgeClient` → FastAPI RAG | — | On query (dashboard tab only) |
+| **Voice** | Same `knowledgeClient` → FastAPI RAG | VAPI mic + `vapi.say()` | On transcript (dashboard tab only) |
+
+VAPI is used for **speech only** — product answers always come from the FastAPI knowledge agent, not VAPI's built-in LLM.
 
 ## Features
 
 - **Interactive dashboard** — Storylane demo embedded in the UI with query-driven navigation
-- **Chat interface** — RAG answers from scraped Carbon Black documentation
+- **Chat interface** — RAG answers from CrowdStrike Falcon documentation
 - **Voice interface** — VAPI-powered speech with dashboard navigation on transcript
 - **LangSmith observability** — Tracing and LLM-as-judge evaluation (optional)
 - **Async FastAPI backend** — REST API with OpenAPI docs
