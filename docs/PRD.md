@@ -167,48 +167,64 @@ Combine RAG-based product knowledge, voice UX, and interactive demo orchestratio
 
 ```mermaid
 flowchart TB
-    subgraph Client["Browser :3000"]
-        UI[Next.js UI]
+    subgraph Client["Browser :3000 (Next.js)"]
         Chat[Chat Interface]
         Voice[Voice Widget]
-        Iframe[Storylane iframe]
-        Mapper[StorylaneMapper]
-        Controller[StorylaneController]
+        KC[knowledgeClient.ts]
+        SC[StorylaneController]
+        SM[StorylaneMapper]
+        IF[Storylane iframe]
     end
 
     subgraph Backend["FastAPI :8000"]
-        API[REST API]
+        KQ["POST /api/v1/knowledge/query"]
         Agent[Product Knowledge Agent]
-        VAPI[VAPI Client]
-        Eval[Evaluation Runner]
+        FAISS[FAISS Vector Store]
+        Eval[LangSmith Evaluators]
     end
 
     subgraph External["External Services"]
-        Anthropic[Anthropic API]
-        VAPICloud[VAPI Cloud]
-        Storylane[Storylane CDN]
-        LangSmith[LangSmith]
+        Docs[CrowdStrike Docs via Dropbox HTML]
+        Anthropic[Anthropic Claude Haiku]
+        OpenAI[OpenAI Embeddings / LLM Fallback]
+        VAPI[VAPI Cloud STT + TTS]
+        LS[LangSmith Tracing]
+        SL[Storylane CDN]
     end
 
-    Chat --> API
-    Voice --> VAPICloud
-    Voice --> Controller
-    Chat --> Controller
-    Controller --> Mapper
-    Controller --> Iframe
-    Iframe --> Storylane
-    API --> Agent
+    Chat --> KC
+    Voice --> KC
+    Voice --> VAPI
+    KC --> KQ
+    KQ --> Agent
+    Agent --> FAISS
     Agent --> Anthropic
-    Eval --> LangSmith
-    Agent --> LangSmith
+    Agent -.-> OpenAI
+    Agent --> LS
+    Chat --> SC
+    Voice --> SC
+    SC --> SM
+    SC --> IF
+    IF --> SL
+    Docs -. scrape on startup .-> FAISS
+    Eval --> LS
 ```
 
 ### Agent loop
 
-1. **Perceive** — User query via chat transcript or voice STT
-2. **Retrieve** — FAISS similarity search over product docs
-3. **Reason** — Claude generates grounded answer (chat path)
-4. **Act** — `StorylaneController` navigates iframe to mapped section
+1. **Perceive** — User query via chat input or voice transcript (VAPI STT)
+2. **Retrieve** — FAISS similarity search over CrowdStrike documentation chunks
+3. **Reason** — Claude Haiku generates a grounded answer (OpenAI fallback if needed)
+4. **Act** — `StorylaneController` navigates the iframe to the mapped dashboard section; voice speaks the RAG response via VAPI TTS
+
+### Voice vs chat
+
+| Path | Knowledge answers | Audio | Dashboard navigation |
+|------|-------------------|-------|----------------------|
+| **Chat** | `knowledgeClient` → FastAPI RAG | — | On query (dashboard tab only) |
+| **Voice** | Same `knowledgeClient` → FastAPI RAG | VAPI mic + `vapi.say()` | On transcript (dashboard tab only) |
+
+VAPI is used for **speech only** — product answers always come from the FastAPI knowledge agent, not VAPI's built-in LLM.
 
 ---
 
@@ -237,9 +253,9 @@ flowchart TB
 
 ### Documentation sources (MVP)
 
-- Broadcom Carbon Black product pages
-- Carbon Black EDR datasheet
-- Configurable via `initialize_agent()` URL list
+- CrowdStrike Falcon documentation pages hosted on Dropbox (demo Q&A set)
+- HTML body extraction via `html_extractor.py` on backend startup
+- Configurable via `app/config/knowledge_docs.py` and `PRODUCT_TYPE=crowdstrike`
 
 ---
 
