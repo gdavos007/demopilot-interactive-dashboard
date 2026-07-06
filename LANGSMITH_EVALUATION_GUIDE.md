@@ -20,9 +20,9 @@ Ensure these environment variables are set in your `.env` file:
 # Langsmith Configuration
 LANGSMITH_TRACING=true
 LANGSMITH_ENDPOINT=https://api.smith.langchain.com
-LANGSMITH_API_KEY=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
+LANGSMITH_API_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXX
 LANGSMITH_PROJECT=pr-product-knowledge-25
-LANGSMITH_DATASET_ID=825cc771-266e-4735-bacd-4c3d5e7ab28e
+LANGSMITH_DATASET_ID=XXXXXXXXXXXXXXXXXXXXX
 ```
 
 ### 2. Dependencies
