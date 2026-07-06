@@ -5,8 +5,7 @@ This module implements LLM-as-Judge evaluators for the Product Knowledge Agent
 using Langsmith evaluation framework.
 """
 
-from typing import Dict, Any, List
-from langsmith.evaluation import evaluate, LangChainStringEvaluator
+from typing import Dict, Any, List, Callable
 from langsmith.schemas import Run, Example
 from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate
@@ -15,19 +14,21 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+EvaluatorFn = Callable[[Run, Example], Dict[str, Any]]
+
 class ProductKnowledgeEvaluator:
     """LLM-as-Judge evaluator for Product Knowledge Agent responses."""
     
     def __init__(self):
         """Initialize the evaluator with Claude as the judge."""
         self.judge_model = ChatAnthropic(
-            model="claude-3-5-haiku-20241022",  # Use Haiku for cost efficiency
+            model="claude-haiku-4-5-20251001",  # Use Haiku for cost efficiency
             anthropic_api_key=settings.ANTHROPIC_API_KEY,
             temperature=0.1,
             max_tokens=500
         )
         
-    def create_helpfulness_evaluator(self) -> LangChainStringEvaluator:
+    def create_helpfulness_evaluator(self) -> EvaluatorFn:
         """Create an evaluator for response helpfulness."""
         
         helpfulness_prompt = ChatPromptTemplate.from_messages([
@@ -93,12 +94,9 @@ Score the helpfulness of this response (1-5) and explain your reasoning.""")
                     "value": False
                 }
         
-        return LangChainStringEvaluator(
-            evaluation_name="helpfulness",
-            evaluate_function=helpfulness_evaluator
-        )
+        return helpfulness_evaluator
     
-    def create_accuracy_evaluator(self) -> LangChainStringEvaluator:
+    def create_accuracy_evaluator(self) -> EvaluatorFn:
         """Create an evaluator for response accuracy."""
         
         accuracy_prompt = ChatPromptTemplate.from_messages([
@@ -164,12 +162,9 @@ Score the accuracy of this response (1-5) and explain your reasoning.""")
                     "value": False
                 }
         
-        return LangChainStringEvaluator(
-            evaluation_name="accuracy",
-            evaluate_function=accuracy_evaluator
-        )
+        return accuracy_evaluator
     
-    def create_relevance_evaluator(self) -> LangChainStringEvaluator:
+    def create_relevance_evaluator(self) -> EvaluatorFn:
         """Create an evaluator for response relevance."""
         
         relevance_prompt = ChatPromptTemplate.from_messages([
@@ -235,12 +230,9 @@ Score the relevance of this response (1-5) and explain your reasoning.""")
                     "value": False
                 }
         
-        return LangChainStringEvaluator(
-            evaluation_name="relevance",
-            evaluate_function=relevance_evaluator
-        )
+        return relevance_evaluator
     
-    def get_all_evaluators(self) -> List[LangChainStringEvaluator]:
+    def get_all_evaluators(self) -> List[EvaluatorFn]:
         """Get all evaluators for comprehensive assessment."""
         return [
             self.create_helpfulness_evaluator(),

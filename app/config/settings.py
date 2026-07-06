@@ -1,8 +1,13 @@
 from typing import Optional
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="ignore",
+    )
     # API Settings
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "DemoPilot"
@@ -28,9 +33,5 @@ class Settings(BaseSettings):
     LANGSMITH_API_KEY: Optional[str] = Field(None, env="LANGSMITH_API_KEY")
     LANGSMITH_PROJECT: Optional[str] = Field(None, env="LANGSMITH_PROJECT")
     LANGSMITH_DATASET_ID: Optional[str] = Field(None, env="LANGSMITH_DATASET_ID")
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
 
 settings = Settings() 

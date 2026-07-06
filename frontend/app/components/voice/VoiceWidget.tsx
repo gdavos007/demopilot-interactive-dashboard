@@ -1,27 +1,33 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Vapi from '@vapi-ai/web';
 import { Fab, CircularProgress } from '@mui/material';
 import MicIcon from '@mui/icons-material/Mic';
 import MicOffIcon from '@mui/icons-material/MicOff';
-
-const vapi = new Vapi(process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY as string);
-
-// Debug VAPI initialization
-console.log('[VoiceWidget] VAPI public key:', process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY ? 'Set' : 'Not set');
-console.log('[VoiceWidget] VAPI client initialized:', !!vapi);
 
 interface VoiceWidgetProps {
   onQueryReceived?: (query: string) => void;
 }
 
 const VoiceWidget: React.FC<VoiceWidgetProps> = ({ onQueryReceived }) => {
-  console.log('[VoiceWidget] Component initialized with onQueryReceived:', !!onQueryReceived);
+  const vapiRef = useRef<Vapi | null>(null);
+  const [isReady, setIsReady] = useState(false);
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
+    const publicKey = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY;
+    if (!publicKey) {
+      console.error('[VoiceWidget] NEXT_PUBLIC_VAPI_PUBLIC_KEY is not set');
+      return;
+    }
+
+    const vapi = new Vapi(publicKey);
+    vapiRef.current = vapi;
+    setIsReady(true);
+    console.log('[VoiceWidget] VAPI client initialized');
+
     vapi.on('call-start', () => {
       setIsSessionActive(true);
       setIsProcessing(false);
@@ -35,8 +41,13 @@ const VoiceWidget: React.FC<VoiceWidgetProps> = ({ onQueryReceived }) => {
     vapi.on('speech-start', () => {
       setIsProcessing(true);
     });
-    
+
     vapi.on('speech-end', () => {
+      setIsProcessing(false);
+    });
+
+    vapi.on('error', (error) => {
+      console.error('[VoiceWidget] VAPI error:', error);
       setIsProcessing(false);
     });
 
@@ -44,20 +55,9 @@ const VoiceWidget: React.FC<VoiceWidgetProps> = ({ onQueryReceived }) => {
       if (message.type === 'transcript' && message.transcriptType === 'final' && message.role === 'user') {
         const query = message.transcript;
         console.log(`[VoiceWidget] Received voice query: "${query}"`);
-        
-        // Notify parent component about the query for dashboard integration
-        console.log('[VoiceWidget] Calling onQueryReceived with query:', query);
-        if (onQueryReceived) {
-          onQueryReceived(query);
-          console.log('[VoiceWidget] onQueryReceived called successfully');
-        } else {
-          console.error('[VoiceWidget] onQueryReceived is not defined!');
-        }
-        
-        // Temporarily skip backend call to focus on dashboard navigation
-        console.log('[VoiceWidget] Skipping backend call for now - focusing on dashboard navigation');
-        
-        // Send a simple response to the user
+
+        onQueryReceived?.(query);
+
         vapi.send({
           type: 'add-message',
           message: {
@@ -69,38 +69,37 @@ const VoiceWidget: React.FC<VoiceWidgetProps> = ({ onQueryReceived }) => {
     });
 
     return () => {
+      vapi.stop();
       vapi.removeAllListeners();
+      vapiRef.current = null;
     };
-  }, []);
+  }, [onQueryReceived]);
 
   const handleToggleCall = async () => {
+    const vapi = vapiRef.current;
+    if (!vapi) {
+      alert('Voice is not configured. Add NEXT_PUBLIC_VAPI_PUBLIC_KEY to frontend/.env.local');
+      return;
+    }
+
     if (isSessionActive) {
       vapi.stop();
-    } else {
-      try {
-        console.log('[VoiceWidget] Starting VAPI call...');
-        await vapi.start({
-          model: {
-            provider: 'openai',
-            model: 'gpt-4o-mini',
-            messages: [
-              {
-                role: 'system',
-                content: 'You are a helpful assistant for Carbon Black product questions. Keep responses concise and helpful.',
-              },
-            ],
-          },
-          voice: {
-            provider: '11labs',
-            voiceId: 'burt',
-          },
-        });
-        console.log('[VoiceWidget] VAPI call started successfully');
-      } catch (error) {
-        console.error('[VoiceWidget] Error starting VAPI call:', error);
-        // Show user-friendly error message
-        alert('Failed to start voice call. Please check your VAPI configuration.');
-      }
+      return;
+    }
+
+    const assistantId = process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID;
+    if (!assistantId) {
+      alert('Voice assistant is not configured. Add NEXT_PUBLIC_VAPI_ASSISTANT_ID to frontend/.env.local');
+      return;
+    }
+
+    try {
+      console.log('[VoiceWidget] Starting VAPI call with assistant:', assistantId);
+      await vapi.start(assistantId);
+      console.log('[VoiceWidget] VAPI call started successfully');
+    } catch (error) {
+      console.error('[VoiceWidget] Error starting VAPI call:', error);
+      alert('Failed to start voice call. Check your VAPI public key and assistant ID.');
     }
   };
 
@@ -109,6 +108,7 @@ const VoiceWidget: React.FC<VoiceWidgetProps> = ({ onQueryReceived }) => {
       color={isSessionActive ? 'secondary' : 'primary'}
       aria-label="toggle voice"
       onClick={handleToggleCall}
+      disabled={!isReady}
       sx={{ position: 'fixed', bottom: 16, right: 16 }}
     >
       {isProcessing ? <CircularProgress color="inherit" /> : (isSessionActive ? <MicOffIcon /> : <MicIcon />)}
@@ -116,4 +116,4 @@ const VoiceWidget: React.FC<VoiceWidgetProps> = ({ onQueryReceived }) => {
   );
 };
 
-export default VoiceWidget; 
+export default VoiceWidget;

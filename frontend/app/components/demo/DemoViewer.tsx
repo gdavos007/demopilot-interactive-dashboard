@@ -8,6 +8,7 @@ import {
   Info as InfoIcon 
 } from '@mui/icons-material';
 import { StorylaneController, NavigationEvent } from '../../lib/storylaneController';
+import { STORYLANE_BASE_URL } from '../../lib/storylaneConfig';
 
 interface DemoViewerProps {
   onQueryReceived?: (query: string) => void;
@@ -81,14 +82,8 @@ const DemoViewer: React.FC<DemoViewerProps> = ({
     }
   };
 
-  // Show loading if controller is not ready
-  if (!storylaneController) {
-    return (
-      <Box sx={{ height: '80vh', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Typography variant="h6">Loading dashboard...</Typography>
-      </Box>
-    );
-  }
+  // Show iframe immediately; controller enables navigation once ready
+  const canNavigate = !!storylaneController;
 
   return (
     <Box sx={{ height: '80vh', width: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -113,10 +108,12 @@ const DemoViewer: React.FC<DemoViewerProps> = ({
             </IconButton>
           </Tooltip>
           
-          <Tooltip title="Return to Main Dashboard">
-            <IconButton onClick={handleHome} size="small">
-              <HomeIcon />
-            </IconButton>
+          <Tooltip title={canNavigate ? 'Return to Main Dashboard' : 'Navigation initializing...'}>
+            <span>
+              <IconButton onClick={handleHome} size="small" disabled={!canNavigate}>
+                <HomeIcon />
+              </IconButton>
+            </span>
           </Tooltip>
           
           <Tooltip title="Interactive Dashboard - Ask questions via chat or voice to navigate automatically">
@@ -150,7 +147,7 @@ const DemoViewer: React.FC<DemoViewerProps> = ({
         
         <iframe
           ref={iframeRef}
-          src="https://app.storylane.io/share/filcrnbzfr0i"
+          src={STORYLANE_BASE_URL}
           style={{ border: 'none', height: '100%', width: '100%' }}
           title="Interactive Carbon Black Dashboard"
           onLoad={handleIframeLoad}

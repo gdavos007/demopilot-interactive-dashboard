@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Grid, Paper, Typography, Tabs, Tab, Button } from '@mui/material';
 import VoiceWidget from './components/voice/VoiceWidget';
 import DemoViewer from './components/demo/DemoViewer';
@@ -9,51 +9,40 @@ import { StorylaneController } from './lib/storylaneController';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState(0);
-  const storylaneControllerRef = useRef<StorylaneController | null>(null);
+  const [storylaneController, setStorylaneController] = useState<StorylaneController | null>(null);
 
   useEffect(() => {
-    // Initialize Storylane controller immediately
     console.log('[Home] Initializing StorylaneController');
     const controller = new StorylaneController();
-    storylaneControllerRef.current = controller;
+    setStorylaneController(controller);
     console.log('[Home] StorylaneController initialized:', !!controller);
 
     return () => {
-      // Cleanup if needed
       console.log('[Home] Cleaning up StorylaneController');
     };
   }, []);
 
-  // Ensure controller is ready before handling queries
-  const isControllerReady = storylaneControllerRef.current !== null;
-
   const handleQueryReceived = (query: string) => {
-    // Handle queries from voice or chat - navigate Storylane dashboard
     console.log('[Home] Chat query received:', query);
-    if (storylaneControllerRef.current) {
-      storylaneControllerRef.current.handleQuery(query, 'chat');
+    if (storylaneController) {
+      storylaneController.handleQuery(query, 'chat');
     } else {
       console.error('[Home] StorylaneController is null when handling chat query');
     }
   };
 
   const handleVoiceQueryReceived = (query: string) => {
-    // Handle queries from voice - navigate Storylane dashboard
     console.log('[Home] Voice query received:', query);
-    console.log('[Home] StorylaneController status:', !!storylaneControllerRef.current);
-    console.log('[Home] Controller ready:', isControllerReady);
-    
-    if (storylaneControllerRef.current) {
+    console.log('[Home] StorylaneController status:', !!storylaneController);
+
+    if (storylaneController) {
       console.log('[Home] Calling storylaneController.handleQuery...');
-      storylaneControllerRef.current.handleQuery(query, 'voice');
+      storylaneController.handleQuery(query, 'voice');
     } else {
       console.log('[Home] StorylaneController not ready yet, will retry...');
-      // Retry after a short delay
       setTimeout(() => {
-        console.log('[Home] Retry - StorylaneController status:', !!storylaneControllerRef.current);
-        if (storylaneControllerRef.current) {
-          console.log('[Home] Retry - Calling storylaneController.handleQuery...');
-          storylaneControllerRef.current.handleQuery(query, 'voice');
+        if (storylaneController) {
+          storylaneController.handleQuery(query, 'voice');
         } else {
           console.error('[Home] StorylaneController still not ready after retry');
         }
@@ -68,11 +57,11 @@ export default function Home() {
   // Debug function to test navigation manually
   const debugTestNavigation = () => {
     console.log('[Home] DEBUG: Testing manual navigation');
-    console.log('[Home] DEBUG: Controller exists:', !!storylaneControllerRef.current);
+    console.log('[Home] DEBUG: Controller exists:', !!storylaneController);
     
-    if (storylaneControllerRef.current) {
+    if (storylaneController) {
       console.log('[Home] DEBUG: Testing navigation to alerts');
-      storylaneControllerRef.current.handleQuery('show me the alerts', 'manual');
+      storylaneController.handleQuery('show me the alerts', 'manual');
     } else {
       console.error('[Home] DEBUG: Controller is null');
     }
@@ -122,8 +111,8 @@ export default function Home() {
               variant="outlined" 
               color="primary" 
               onClick={() => {
-                console.log('[Home] DEBUG: Controller status:', !!storylaneControllerRef.current);
-                console.log('[Home] DEBUG: Controller ref:', storylaneControllerRef.current);
+                console.log('[Home] DEBUG: Controller status:', !!storylaneController);
+                console.log('[Home] DEBUG: Controller ref:', storylaneController);
               }}
             >
               Debug: Controller Status
@@ -132,9 +121,9 @@ export default function Home() {
               variant="outlined" 
               color="secondary" 
               onClick={() => {
-                if (storylaneControllerRef.current) {
+                if (storylaneController) {
                   console.log('[Home] DEBUG: Resetting dashboard to main view');
-                  storylaneControllerRef.current.resetDashboard('manual');
+                  storylaneController.resetDashboard('manual');
                 } else {
                   console.error('[Home] DEBUG: Controller is null');
                 }
@@ -146,9 +135,9 @@ export default function Home() {
               variant="outlined" 
               color="error" 
               onClick={() => {
-                if (storylaneControllerRef.current) {
+                if (storylaneController) {
                   console.log('[Home] DEBUG: Testing force reload to Policies');
-                  storylaneControllerRef.current.handleQuery('show me the policies', 'manual');
+                  storylaneController.handleQuery('show me the policies', 'manual');
                 } else {
                   console.error('[Home] DEBUG: Controller is null');
                 }
@@ -160,10 +149,10 @@ export default function Home() {
               variant="outlined" 
               color="warning" 
               onClick={() => {
-                if (storylaneControllerRef.current) {
+                if (storylaneController) {
                   console.log('[Home] DEBUG: Testing direct URL change');
                   // Test with a completely different URL to see if Storylane responds
-                  const testUrl = 'https://app.storylane.io/share/filcrnbzfr0i?pageid=18c0582b-9aa5-4723-b272-23b2cedb24c7';
+                  const testUrl = 'https://app.storylane.io/share/zjalh0zmyhdm?page_id=9a80dff6-0cb1-42e0-82ab-d4fc6b50ad40';
                   console.log('[Home] DEBUG: Testing URL:', testUrl);
                   
                   // Direct iframe manipulation
@@ -195,15 +184,25 @@ export default function Home() {
         </Grid>
 
         <Grid item xs={12}>
-          <Paper elevation={3} sx={{ height: '80vh', overflow: 'hidden' }}>
+          <Paper
+            elevation={3}
+            sx={{
+              height: '80vh',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
             {activeTab === 0 && (
               <DemoViewer 
                 onQueryReceived={handleQueryReceived}
-                storylaneController={storylaneControllerRef.current || undefined}
+                storylaneController={storylaneController ?? undefined}
               />
             )}
             {activeTab === 1 && (
-              <ChatInterface onQueryReceived={handleQueryReceived} />
+              <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                <ChatInterface onQueryReceived={handleQueryReceived} />
+              </Box>
             )}
           </Paper>
         </Grid>

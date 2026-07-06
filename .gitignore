@@ -24,6 +24,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+!frontend/app/lib/
 lib64/
 parts/
 sdist/
@@ -36,6 +37,7 @@ MANIFEST
 
 # Virtual environments
 venv/
+source/
 env/
 ENV/
 env.bak/

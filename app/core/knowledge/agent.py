@@ -43,7 +43,7 @@ class ProductKnowledgeAgent:
         # Initialize Langchain ChatAnthropic for tracing
         if self.langsmith_enabled:
             self.chat_model = ChatAnthropic(
-                model="claude-3-5-sonnet-20241022",
+                model="claude-haiku-4-5-20251001",
                 anthropic_api_key=settings.ANTHROPIC_API_KEY,
                 temperature=0.1,
                 max_tokens=1000
@@ -315,7 +315,7 @@ class ProductKnowledgeAgent:
             else:
                 # Fallback to direct Anthropic client
                 response = self.anthropic_client.messages.create(
-                    model="claude-3-5-sonnet-20241022",
+                    model="claude-haiku-4-5-20251001",
                     max_tokens=1000,
                     system=system_prompt,
                     messages=[
