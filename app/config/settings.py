@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # Anthropic Settings
     ANTHROPIC_API_KEY: str = Field(..., env="ANTHROPIC_API_KEY")
     OPENAI_API_KEY: Optional[str] = Field(None, env="OPENAI_API_KEY")
+
+    # Knowledge agent product: crowdstrike | carbon_black | prisma_cloud
+    PRODUCT_TYPE: str = Field("crowdstrike", env="PRODUCT_TYPE")
     
     # Storylane Settings
     STORYLANE_BASE_URL: str = "https://app.storylane.io/share"

@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Box, TextField, Button, List, ListItem, ListItemText, Paper, Typography } from '@mui/material';
+import { queryKnowledge, KNOWLEDGE_ERROR_MESSAGE } from '../../lib/knowledgeClient';
 
 interface Message {
   sender: 'user' | 'bot';
@@ -28,27 +29,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onQueryReceived }) => {
 
     onQueryReceived?.(query);
 
-    const backendUrl = `${process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'}/api/v1/knowledge/query`;
-
     try {
-      const response = await fetch(backendUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = await queryKnowledge(query);
       const botMessage: Message = { sender: 'bot', text: data.response };
       setMessages((prev) => [...prev, botMessage]);
     } catch (error) {
       console.error('Error sending message:', error);
+      const errorText =
+        error instanceof Error && error.message ? error.message : KNOWLEDGE_ERROR_MESSAGE;
       const errorMessage: Message = {
         sender: 'bot',
-        text: 'I apologize, but I encountered an error processing your request. Please try again or check your connection.',
+        text: errorText,
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {

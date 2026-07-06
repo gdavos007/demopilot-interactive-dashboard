@@ -83,7 +83,7 @@ export class StorylaneMapper {
         url: URLS.apiAccess
       },
       {
-        question: 'How does Carbon Black detect and respond to fileless or living-off-the-land (LotL) attacks?',
+        question: 'How does CrowdStrike detect and respond to fileless or living-off-the-land (LotL) attacks?',
         section: 'Alerts',
         url: URLS.alertsFileless
       },
@@ -133,7 +133,7 @@ export class StorylaneMapper {
         url: URLS.malwareRemoval
       },
       {
-        question: 'how is carbon black deployed',
+        question: 'how is crowdstrike deployed',
         section: 'Settings',
         url: URLS.platforms
       },

@@ -22,22 +22,32 @@ export default function Home() {
     };
   }, []);
 
+  const navigateStorylaneIfVisible = (query: string, source: 'chat' | 'voice') => {
+    if (activeTab !== 0) {
+      console.log(`[Home] Skipping Storylane navigation on ${source} — dashboard tab not active`);
+      return;
+    }
+    if (storylaneController) {
+      storylaneController.handleQuery(query, source);
+    } else {
+      console.warn('[Home] StorylaneController not ready for navigation');
+    }
+  };
+
   const handleQueryReceived = (query: string) => {
     console.log('[Home] Chat query received:', query);
-    if (storylaneController) {
-      storylaneController.handleQuery(query, 'chat');
-    } else {
-      console.error('[Home] StorylaneController is null when handling chat query');
-    }
+    navigateStorylaneIfVisible(query, 'chat');
   };
 
   const handleVoiceQueryReceived = (query: string) => {
     console.log('[Home] Voice query received:', query);
     console.log('[Home] StorylaneController status:', !!storylaneController);
 
-    if (storylaneController) {
+    if (activeTab === 0 && storylaneController) {
       console.log('[Home] Calling storylaneController.handleQuery...');
       storylaneController.handleQuery(query, 'voice');
+    } else if (activeTab !== 0) {
+      console.log('[Home] Skipping Storylane navigation — dashboard tab not active');
     } else {
       console.log('[Home] StorylaneController not ready yet, will retry...');
       setTimeout(() => {
@@ -82,10 +92,10 @@ export default function Home() {
       <Grid container spacing={2}>
         <Grid item xs={12}>
           <Typography variant="h4" component="h1" gutterBottom>
-            DemoPilot - Interactive Carbon Black Dashboard
+            DemoPilot - Interactive CrowdStrike Falcon Dashboard
           </Typography>
           <Typography variant="body1" color="text.secondary" paragraph>
-            Ask questions via chat or voice to automatically navigate the Carbon Black dashboard to relevant sections.
+            Ask questions via chat or voice to automatically navigate the CrowdStrike Falcon dashboard to relevant sections.
           </Typography>
           
           {/* Debug buttons for testing */}
@@ -156,7 +166,7 @@ export default function Home() {
                   console.log('[Home] DEBUG: Testing URL:', testUrl);
                   
                   // Direct iframe manipulation
-                  const iframe = document.querySelector('iframe[title="Interactive Carbon Black Dashboard"]');
+                  const iframe = document.querySelector('iframe[title="Interactive Dashboard"]');
                   if (iframe) {
                     console.log('[Home] DEBUG: Found iframe, changing src to:', testUrl);
                     iframe.src = testUrl;

@@ -8,15 +8,16 @@ by retrieving and indexing documentation and answering product-specific question
 import os
 import asyncio
 import aiohttp
-from bs4 import BeautifulSoup
+from app.core.knowledge.html_extractor import extract_main_text
 import anthropic
 from typing import List, Dict, Any, Optional
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_anthropic import ChatAnthropic
 from langsmith import traceable
 from app.config.settings import settings
 from app.config.langsmith_config import setup_langsmith_tracing, is_langsmith_enabled
+from app.config.knowledge_docs import CROWDSTRIKE_KNOWLEDGE_DOCS, CROWDSTRIKE_FALLBACK_ANSWERS
 from app.models.schemas import KnowledgeQuery, KnowledgeResponse
 import logging
 
@@ -25,13 +26,15 @@ logger = logging.getLogger(__name__)
 class ProductKnowledgeAgent:
     """Agent specialized in security product knowledge."""
     
-    def __init__(self, product_type: str = "carbon_black"):
+    def __init__(self, product_type: str | None = None):
         """
         Initialize the Knowledge Agent.
         
         Args:
-            product_type: Type of product to focus on ('prisma_cloud' or 'carbon_black')
+            product_type: Type of product to focus on
+                ('crowdstrike', 'carbon_black', or 'prisma_cloud')
         """
+        product_type = product_type or settings.PRODUCT_TYPE
         logger.info("Initializing ProductKnowledgeAgent for %s", product_type)
         
         # Setup Langsmith tracing
@@ -52,6 +55,20 @@ class ProductKnowledgeAgent:
         else:
             self.chat_model = None
             logger.info("Langchain ChatAnthropic not initialized (tracing disabled)")
+
+        self.openai_chat_model = None
+        if settings.OPENAI_API_KEY:
+            try:
+                from langchain_openai import ChatOpenAI
+                self.openai_chat_model = ChatOpenAI(
+                    model="gpt-4o-mini",
+                    openai_api_key=settings.OPENAI_API_KEY,
+                    temperature=0.1,
+                    max_tokens=1000,
+                )
+                logger.info("OpenAI chat model initialized as LLM fallback")
+            except ImportError:
+                logger.warning("langchain_openai not available; no OpenAI LLM fallback")
         
         self.product_type = product_type
         
@@ -82,30 +99,60 @@ class ProductKnowledgeAgent:
         
     async def initialize_agent(self):
         """Initialize with default product URLs based on product type."""
-        if self.product_type == "carbon_black":
-            # Carbon Black URLs
+        if self.product_type == "crowdstrike":
+            print("Initializing Product Knowledge Agent with CrowdStrike documentation...")
+            await self._initialize_crowdstrike_docs()
+        elif self.product_type == "carbon_black":
             urls = [
                 "https://www.broadcom.com/products/carbon-black",
                 "https://www.broadcom.com/products/carbon-black/threat-prevention",
                 "https://www.broadcom.com/products/carbon-black/threat-detection-and-response",
                 "https://www.broadcom.com/products/carbon-black/threat-detection-and-response/endpoint-detection-and-response",
-                "https://docs.broadcom.com/doc/Carbon-Black-EDR-Datasheet"
+                "https://docs.broadcom.com/doc/Carbon-Black-EDR-Datasheet",
             ]
             print("Initializing Product Knowledge Agent with Carbon Black documentation...")
+            await self.initialize_with_multiple_urls(urls)
         else:
-            # Prisma Cloud URLs
             urls = [
                 "https://docs.prismacloud.io/en/enterprise-edition/rn/prisma-cloud-release-info",
                 "https://docs.prismacloud.io/en/enterprise-edition/rn/features-introduced-in-2023",
-                "https://docs.prismacloud.io/en/enterprise-edition/rn/features-introduced-in-2022"
+                "https://docs.prismacloud.io/en/enterprise-edition/rn/features-introduced-in-2022",
             ]
             print("Initializing Product Knowledge Agent with Prisma Cloud documentation...")
-            
-        # Initialize with these URLs
-        await self.initialize_with_multiple_urls(urls)
-        
-        # Add fallback product information in case URL scraping fails
+            await self.initialize_with_multiple_urls(urls)
+
         self._add_fallback_product_info()
+
+    async def _initialize_crowdstrike_docs(self) -> None:
+        """Load CrowdStrike demo Q&A docs from Dropbox-hosted HTML pages."""
+        any_success = False
+
+        for doc in CROWDSTRIKE_KNOWLEDGE_DOCS:
+            question = doc["question"]
+            url = doc["url"]
+            print(f"Processing CrowdStrike doc for: {question}")
+
+            text = await self.scrape_documentation(url)
+            if not text or len(text) < 100:
+                logger.warning(
+                    "Scrape failed or returned little content for %s; using fallback if available",
+                    question,
+                )
+                fallback = CROWDSTRIKE_FALLBACK_ANSWERS.get(question)
+                if fallback:
+                    text = f"Demo question: {question}\n\n{fallback}"
+                else:
+                    continue
+
+            labeled_text = f"Demo question: {question}\nProduct: CrowdStrike Falcon\n\n{text}"
+            self.process_documentation(labeled_text)
+            self.processed_urls.add(url)
+            any_success = True
+
+        if any_success:
+            print("Agent initialized successfully with CrowdStrike documentation sources!")
+        else:
+            print("Failed to initialize agent with CrowdStrike docs. Using fallback data only...")
 
     async def scrape_documentation(self, url: str) -> str:
         """
@@ -121,18 +168,11 @@ class ProductKnowledgeAgent:
         try:
             print(f"Scraping {url}...")
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=10) as response:
+                async with session.get(url, timeout=30) as response:
                     response.raise_for_status()
                     html = await response.text()
-                    
-            soup = BeautifulSoup(html, 'html.parser')
-            
-            # Remove unnecessary elements
-            for element in soup.find_all(['script', 'style', 'nav', 'footer']):
-                element.decompose()
-                
-            # Get the main content
-            text = soup.get_text(strip=True)
+
+            text = extract_main_text(html)
             print(f"Scraped {len(text)} characters of text from {url}")
             logger.info("Successfully scraped %d characters from %s", len(text), url)
             return text
@@ -292,42 +332,16 @@ class ProductKnowledgeAgent:
                 context_text = "\n\n".join([doc["content"] for doc in relevant_docs])
             
             # Create system prompt
-            system_prompt = f"""You are a knowledgeable assistant for {self.product_type.replace('_', ' ').title()} products. 
+            system_prompt = f"""You are a knowledgeable assistant for {self.product_type.replace('_', ' ').title()} products.
             Use the provided context to answer questions accurately and helpfully.
+            If the user asks about one of the demo questions, prioritize the matching context.
             
             Context:
             {context_text}
             
             Please provide a clear, accurate response based on the context provided."""
             
-            # Get response from Claude using traced model if available
-            if self.langsmith_enabled and self.chat_model:
-                # Use Langchain ChatAnthropic for tracing
-                messages = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": query.query}
-                ]
-                
-                response = await self.chat_model.ainvoke(messages)
-                response_text = response.content
-                
-                logger.info("Response generated using traced ChatAnthropic model")
-            else:
-                # Fallback to direct Anthropic client
-                response = self.anthropic_client.messages.create(
-                    model="claude-haiku-4-5-20251001",
-                    max_tokens=1000,
-                    system=system_prompt,
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": query.query
-                        }
-                    ]
-                )
-                response_text = response.content[0].text
-                
-                logger.info("Response generated using direct Anthropic client")
+            response_text = await self._generate_llm_response(system_prompt, query.query)
             
             # Calculate confidence based on context relevance
             confidence = 0.8 if relevant_docs else 0.5
@@ -342,6 +356,46 @@ class ProductKnowledgeAgent:
             logger.error("Error getting response from knowledge agent: %s", e, exc_info=True)
             # Re-raise the exception so the API layer can handle it
             raise
+
+    async def _generate_llm_response(self, system_prompt: str, user_query: str) -> str:
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_query},
+        ]
+
+        if self.langsmith_enabled and self.chat_model:
+            try:
+                response = await self.chat_model.ainvoke(messages)
+                logger.info("Response generated using traced ChatAnthropic model")
+                return response.content
+            except Exception as anthropic_error:
+                logger.warning(
+                    "Anthropic model failed (%s); trying fallback if available",
+                    anthropic_error,
+                )
+                if not self.openai_chat_model:
+                    raise
+
+        try:
+            response = self.anthropic_client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=1000,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_query}],
+            )
+            logger.info("Response generated using direct Anthropic client")
+            return response.content[0].text
+        except Exception as anthropic_error:
+            logger.warning(
+                "Direct Anthropic client failed (%s); trying OpenAI fallback if available",
+                anthropic_error,
+            )
+            if not self.openai_chat_model:
+                raise
+
+        response = await self.openai_chat_model.ainvoke(messages)
+        logger.info("Response generated using OpenAI fallback model")
+        return response.content
 
     async def initialize(self, doc_url: str):
         """
@@ -361,7 +415,20 @@ class ProductKnowledgeAgent:
         logger.info("Adding fallback product information for %s", self.product_type)
         fallback_text = []
         
-        if self.product_type == "carbon_black":
+        if self.product_type == "crowdstrike":
+            fallback_text.append("CrowdStrike Falcon is a cloud-native endpoint protection platform.")
+            fallback_text.append(
+                "Falcon provides EDR, threat hunting, malware prevention, and automated response actions."
+            )
+            fallback_text.append(
+                "Supported platforms include Windows, macOS, and Linux endpoints managed from the Falcon console."
+            )
+            fallback_text.append(
+                "Falcon APIs and data connectors support custom integrations and third-party SIEM workflows."
+            )
+            for question, answer in CROWDSTRIKE_FALLBACK_ANSWERS.items():
+                fallback_text.append(f"Demo question: {question}\n{answer}")
+        elif self.product_type == "carbon_black":
             # Carbon Black fallback information
             fallback_text.append("Carbon Black is a cybersecurity solution now owned by Broadcom (previously VMware).")
             fallback_text.append("Carbon Black provides endpoint protection, detection and response capabilities.")

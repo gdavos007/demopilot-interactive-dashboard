@@ -28,6 +28,6 @@ async def test_knowledge_query():
 
 def test_fallback_product_info():
     """Test that fallback product information is added"""
-    agent = ProductKnowledgeAgent(product_type="carbon_black")
+    agent = ProductKnowledgeAgent(product_type="crowdstrike")
     agent._add_fallback_product_info()
     assert agent.vector_store is not None 

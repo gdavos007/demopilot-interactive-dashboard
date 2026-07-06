@@ -25,7 +25,16 @@ async def query_knowledge(query: KnowledgeQuery):
         return response
     except Exception as e:
         logger.error("Error in knowledge query: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        error_message = str(e)
+        if "credit balance is too low" in error_message.lower():
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "Anthropic API credits are exhausted. Add billing credits at "
+                    "console.anthropic.com, or ensure OPENAI_API_KEY is set for fallback."
+                ),
+            )
+        raise HTTPException(status_code=500, detail=error_message)
 
 @router.get("/context/{query}")
 async def get_context(query: str, k: int = Query(default=4, ge=1, le=10)):

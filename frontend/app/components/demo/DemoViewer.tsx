@@ -90,9 +90,6 @@ const DemoViewer: React.FC<DemoViewerProps> = ({
       {/* Dashboard Header */}
       <Paper elevation={1} sx={{ p: 1, mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Box display="flex" alignItems="center" gap={1}>
-          <Typography variant="h6" component="h2">
-            Carbon Black Dashboard
-          </Typography>
           <Chip 
             label={currentSection} 
             color="primary" 
@@ -149,7 +146,7 @@ const DemoViewer: React.FC<DemoViewerProps> = ({
           ref={iframeRef}
           src={STORYLANE_BASE_URL}
           style={{ border: 'none', height: '100%', width: '100%' }}
-          title="Interactive Carbon Black Dashboard"
+          title="Interactive Dashboard"
           onLoad={handleIframeLoad}
           key="storylane-iframe"
         />
