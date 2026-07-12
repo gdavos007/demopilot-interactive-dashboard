@@ -37,6 +37,7 @@ MANIFEST
 
 # Virtual environments
 venv/
+.venv/
 source/
 env/
 ENV/
@@ -183,3 +184,7 @@ coverage/
 
 # Storylane test files
 test-*.html
+
+# Eval artifacts (scraped doc content, MLflow run store)
+eval_results/
+mlruns/
