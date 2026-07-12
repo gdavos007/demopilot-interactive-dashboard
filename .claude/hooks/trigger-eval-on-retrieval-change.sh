@@ -39,7 +39,7 @@ echo "[hook] Delegating to eval-runner subagent..." >> "$LOG_FILE"
 # invocation flags against your installed Claude Code version
 # (`claude -p --help`) before relying on this in a live demo -- CLI flags
 # for headless mode have changed across recent releases.
-nohup claude -p "@eval-runner Run a retrieval evaluation now. The file $FILE_PATH was just edited. Report metric deltas, likely cause, and one next action." \
+nohup claude -p "@eval-runner The file $FILE_PATH was just edited. Run scripts/export_retrievals.py to produce a fresh eval_results/retrievals.json, confirm it wrote cleanly (record count, any zero-context questions), and note what changed in the retrieval path. RAGAS scoring is NOT run here — remind that scoring must be done manually in the Databricks notebook." \
   >> "$LOG_FILE" 2>&1 &
 
 echo "[hook] eval-runner triggered in background, logging to $LOG_FILE" >> "$LOG_FILE"
