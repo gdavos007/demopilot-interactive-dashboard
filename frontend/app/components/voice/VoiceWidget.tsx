@@ -26,6 +26,27 @@ function formatVapiError(error: unknown): string {
   }
 }
 
+// VAPI runs calls over Daily.co WebRTC. When the room closes, Daily "ejects"
+// the client and the SDK forwards it through the 'error' channel even though
+// it's just the call ending (a 'call-end' event also fires). Treat these as a
+// normal end-of-call rather than a real error so the demo console stays clean.
+function isCallEndedError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const e = error as Record<string, any>;
+  if (
+    e?.error?.error?.type === 'ejected' ||
+    e?.error?.message?.type === 'ejected' ||
+    e?.error?.errorMsg === 'Meeting has ended'
+  ) {
+    return true;
+  }
+  try {
+    return /ejected|meeting has ended/i.test(JSON.stringify(error));
+  } catch {
+    return false;
+  }
+}
+
 const VoiceWidget: React.FC<VoiceWidgetProps> = ({ onQueryReceived }) => {
   const vapiRef = useRef<Vapi | null>(null);
   const onQueryReceivedRef = useRef(onQueryReceived);
@@ -74,6 +95,14 @@ const VoiceWidget: React.FC<VoiceWidgetProps> = ({ onQueryReceived }) => {
     });
 
     vapi.on('error', (error) => {
+      // End-of-call ejection from Daily isn't a real error — reset state quietly.
+      if (isCallEndedError(error)) {
+        console.info('[VoiceWidget] Voice call ended (VAPI/Daily): meeting has ended');
+        setIsProcessing(false);
+        setIsSessionActive(false);
+        isHandlingTranscriptRef.current = false;
+        return;
+      }
       console.error('[VoiceWidget] VAPI error:', formatVapiError(error));
       setIsProcessing(false);
       isHandlingTranscriptRef.current = false;
