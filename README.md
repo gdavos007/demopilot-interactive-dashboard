@@ -151,12 +151,6 @@ Dashboard section URLs are mapped in `frontend/app/lib/storylaneMapper.ts`. The 
 
 To update navigation targets, edit the `URLS` object in `storylaneMapper.ts` with page IDs from your Storylane share links.
 
-## Testing
-
-```bash
-pytest
-```
-
 ## How I used Claude Code hooks and subagents to iterate on this pipeline
 
 This repo already had generation-quality evals (LangSmith LLM-as-judge, see `LANGSMITH_EVALUATION_GUIDE.md`). It didn't have a retrieval-quality layer, so I closed that gap using Claude Code's hook and subagent primitives rather than a manual "remember to re-run the eval script" habit.
