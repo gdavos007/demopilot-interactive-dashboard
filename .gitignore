@@ -113,6 +113,9 @@ jspm_packages/
 .next/
 out/
 
+# TypeScript incremental build info
+*.tsbuildinfo
+
 # Nuxt.js build / generate output
 .nuxt
 dist
