@@ -131,6 +131,16 @@ frontend/                     # Next.js 15 UI
     components/               # Chat, DemoViewer, VoiceWidget
     lib/                      # Storylane controller, mapper, config
 
+scripts/
+  export_retrievals.py        # Export golden-set retrievals -> eval_results/retrievals.json
+
+.claude/                      # Claude Code hook + subagent for retrieval evals
+  agents/eval-runner.md       # Retrieval-eval subagent (produces retrievals.json)
+  hooks/                      # PostToolUse hook: runs export on retrieval-logic edits
+  settings.json               # Wires the hook to Edit/Write
+
+eval_results/                 # Retrieval export output (gitignored)
+
 docs/
   PRD.md                      # Product requirements document
 ```
@@ -146,6 +156,37 @@ To update navigation targets, edit the `URLS` object in `storylaneMapper.ts` wit
 ```bash
 pytest
 ```
+
+## How I used Claude Code hooks and subagents to iterate on this pipeline
+
+This repo already had generation-quality evals (LangSmith LLM-as-judge, see `LANGSMITH_EVALUATION_GUIDE.md`). It didn't have a retrieval-quality layer, so I closed that gap using Claude Code's hook and subagent primitives rather than a manual "remember to re-run the eval script" habit.
+
+Setup:
+
+* `.claude/agents/eval-runner.md` -- a subagent scoped to retrieval evaluation only, kept separate from generation evaluation so the two don't get conflated.
+* `.claude/hooks/trigger-eval-on-retrieval-change.sh` -- a `PostToolUse` hook that fires automatically whenever `app/core/knowledge/agent.py` or `html_extractor.py` (the files that own chunking, embedding, and FAISS retrieval) get edited. It delegates to `eval-runner` in the background.
+* `scripts/export_retrievals.py` -- runs in the app's own environment, re-scrapes the CrowdStrike docs, rebuilds the FAISS index with the current chunking config, and writes retrieved contexts for the golden question set to `eval_results/retrievals.json`. It does not score anything -- no RAGAS, no MLflow, no LLM judge calls happen locally.
+* A Databricks notebook reads `retrievals.json` and scores it with RAGAS (`LLMContextPrecisionWithoutReference`, using Claude Haiku as the judge model), logging every run to MLflow so retrieval quality is a trend across pipeline edits, not a single point-in-time number.
+
+The point of the hook is that it's deterministic: the export runs whether or not I remember to run it, because it's wired to the edit itself rather than to my own discipline. Scoring currently requires a manual step in the Databricks notebook -- RAGAS scoring runs in an isolated environment on purpose, since it has a dependency chain (`ragas` requires `langchain-community<0.4`) that's incompatible with this app's pinned `langchain 0.3.x` stack, so keeping it separate avoids destabilizing the working app.
+
+Current baseline (Databricks-logged, RAGAS context precision): `context_precision = 20.8%` over the CrowdStrike golden question set, chunk_size=1000, chunk_overlap=200. Logged via MLflow to a Databricks experiment. Context recall is scoped as a known next step -- it requires a labeled reference-answer set per question, which the current golden set doesn't yet include (`LLMContextPrecisionWithoutReference` doesn't need one, which is why precision shipped first).
+
+Goal-based loop for parameter tuning: Rather than manually sweeping `chunk_size` / `chunk_overlap` by hand, I used a goal-based loop to let Claude Code iterate, with an explicit human checkpoint between attempts -- since RAGAS scoring runs in an isolated Databricks notebook rather than being callable directly from Claude Code today, the loop pauses for a scored result instead of running fully autonomously:
+
+```
+/goal Tune chunk_size and chunk_overlap in app/core/knowledge/agent.py to
+maximize context_precision. After each change, run
+scripts/export_retrievals.py to produce fresh retrievals, then STOP and
+ask me to run the Databricks scoring notebook and report back the
+context_precision value before trying the next configuration. Try at
+most 2 configurations total. Report both configurations tried and the
+winning one when done.
+```
+
+Capping this at 2 configurations was a deliberate choice for this demo, not a limitation of the pattern -- it bounds the loop to a small, observable sweep so each iteration and its reasoning stays easy to walk through live, rather than optimizing for the largest possible search.
+
+Closing this loop end-to-end (Claude Code triggering Databricks scoring directly, e.g. via the MLflow API, rather than pausing for a manual notebook run) is the natural next step toward a fully autonomous goal-based loop.
 
 ## Troubleshooting
 
